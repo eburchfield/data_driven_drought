@@ -8,13 +8,13 @@ library(raster)
 #dataset paths
 data_dr <- '/nfs/datadrivendroughteffect-data/Data/NDVI/'
 data_ex <- 'ndvi.tif'
-shp_dr <- '/nfs/datadrivendroughteffect-data/Data/cb_2015_us_county_500k.shp'
+shp_dr <- '/nfs/datadrivendroughteffect-data/Data/County_shp/cb_2015_us_county_500k.shp'
 
 #data prep
 data_list <- Sys.glob(paste(data_dr,"*",data_ex,sep=""))
 raster_data <- raster(data_list[100])
 shp_data <- readOGR(dsn=shp_dr, layer = "cb_2015_us_county_500k", stringsAsFactors=F)
-shp_data <- spTransform(counties, projection(raster_data))
+shp_data <- spTransform(shp_data, projection(raster_data))
 
 #scale function
 rescale <- function(x, x.min = NULL, x.max = NULL, new.min = 0, new.max = 1) {
