@@ -1,47 +1,70 @@
 library(rgdal)
 library(raster)
+library(ncdf4)
+library(rslurm)
 
-#space-time resolution
-#obs_per_year = 52; 
-#missing data flag
+#objects
+data_list <- Sys.glob(paste('/nfs/datadrivendroughteffect-data/Data/NDVI/',"*",'ndvi_final.tif',sep=""))
+shp_data <- shapefile('/nfs/datadrivendroughteffect-data/Data/County_shp/cty_ndvi_proj.shp')
+ag_mask <- raster('/nfs/datadrivendroughteffect-data/Data/Landuse/ag_mask.tif/')
+eco_mask <- raster('/nfs/datadrivendroughteffect-data/Data/Landuse/eco_mask.tif')
 
-#dataset paths
-data_dr <- '/nfs/datadrivendroughteffect-data/Data/NDVI/'
-data_ex <- 'ndvi.tif'
-shp_dr <- '/nfs/datadrivendroughteffect-data/Data/County_shp/cb_2015_us_county_500k.shp'
+extract_data <- function(i) {
 
-#data prep
-data_list <- Sys.glob(paste(data_dr,"*",data_ex,sep=""))
-raster_data <- raster(data_list[100])
-shp_data <- readOGR(dsn=shp_dr, layer = "cb_2015_us_county_500k", stringsAsFactors=F)
-shp_data <- spTransform(shp_data, projection(raster_data))
+  rasterOptions(tmpdir = "/nfs/datadrivendroughteffect-data/raster_tmp")
+  name <- data_list[i]
+  raster_data <- raster(name)
 
-#scale function
-rescale <- function(x, x.min = NULL, x.max = NULL, new.min = 0, new.max = 1) {
-  if(is.null(x.min)) x.min = cellStats(x, "min")
-  if(is.null(x.max)) x.max = cellStats(x, "max")
-  new.min + (x - x.min) * ((new.max - new.min) / (x.max - x.min))
-}
-
-raster_data <- rescale(raster_data, x.min = 0, x.max = 200, new.min = -1, new.max = 1)
-
-#extract data
-extract_data <- extract(raster_data, shp_data)
-names(extract_data) <- shp_data$ID
-#591 secs
-#all cells with center in polygon are fully counted in, other cells are out
-#to change, extract(raster1, vector_layer, fun=mean, weights=TRUE); takes more time
-
-#compute mean for polygon
-mn <- list()
-sd <- list()
-
-for (name in names(extract_data)) {
-  mn_cty <- mean(extract_data[[name]], na.rm=T)
-  sd_cty <- sd(extract_data[[name]], na.rm=T)
-  mn[[name]] <- mn_cty
-  sd[[name]] <- sd_cty
+  #extract date info 
+  year <- as.numeric(substr(name, 51, 52))
+  year <- ifelse(year > 17, paste("19", year, sep=""), paste("20", year, sep=""))
+  doy <- format(strptime(substr(name, 54, 56), format="%j"), format="%m-%d") 
+  month <- substr(doy,0,2)
+  day <- substr(doy,4,5)
+  
+  #extract ag/eco pixels
+  ag_data <- extract(mask(raster_data, ag_mask), shp_data, na.rm=T)  
+  names(ag_data) <- shp_data$ID
+  eco_data <- extract(mask(raster_data, eco_mask), shp_data, na.rm=T)  
+  names(eco_data) <- shp_data$ID
+  
+  final_ag <- list()
+  final_eco <- list()
+  
+  for (name in names(ag_data)) {
+    qt <- quantile(ag_data[[name]], probs = seq(0, 1, 0.05), na.rm = T)
+    mn <- mean(ag_data[[name]], na.rm=T) 
+    names(mn) <- "mean_ag"
+    names(day) <- "day"
+    cty_list <- c(day, mn, qt)
+    final_ag[[name]] <- cty_list
+    
+    qt_e <- quantile(eco_data[[name]], probs = seq(0, 1, 0.05), na.rm = T)
+    mn_e <- mean(eco_data[[name]], na.rm=T) 
+    names(mn_e) <- "mean_eco"
+    cty_list_e <- c(mn_e, qt_e)
+    final_eco[[name]] <- cty_list_e
+  }
+  
+  final_ag_data = do.call(rbind, final_ag)  
+  final_eco_data = do.call(rbind, final_eco)  
+  final_data = cbind(final_ag_data, final_eco_data)
+  row.names(final_data) <- paste(year, "_", month, "_",row.names(final_data), sep="")
+  
+  return(final_data)
   
 }
 
+params <- data.frame(i = seq_along(data_list))
+sjob <- slurm_apply(extract_data, params, nodes = 10, cpus_per_node = 8,
+                    add_objects = c("data_list", "shp_data", "ag_mask", "eco_mask"), 
+                    slurm_options = list(partition = "sesync"))
 
+
+print_job_status(sjob)
+res <- get_slurm_out(sjob, "table")
+out_data <- as.data.frame(res)
+write.table(out_data, file = "/nfs/datadrivendroughteffect-data/Data/NDVI/county_mean_quantile.csv", 
+            sep = ",", col.names = TRUE)
+#test <- read.csv("/nfs/datadrivendroughteffect-data/Data/NDVI/county_mean_quantile.csv", sep=",", row.names=NULL)
+#cleanup_files(sjob)
