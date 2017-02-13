@@ -7,7 +7,7 @@ library(rslurm)
 
 crops <- c("ag", "eco", "maize", "wheat", "soy")
 outtmp <- '/nfs/scratch/ddde/'
-dir.create(outtmp)
+dir.create(outtmp, showWarnings=FALSE)
 
 # UPDATE FOR EACH DATASET
 res <- "365"                # "weekly"
@@ -18,6 +18,11 @@ dlist <- Sys.glob(paste0('/nfs/datadrivendroughteffect-data/Data/PRISM/PRISM_dai
 slurm_pars <- expand.grid(dname=dname, dfile=dlist,
                           res=res, crop=crops, stringsAsFactors=FALSE)
 matrix_prep <- function(dname, dfile, res, crop) {
+  
+  # set thread-specific, local tmp dir for raster calculations
+  raster_tmp <- paste0('/tmp/ddde_raster_', Sys.getpid())
+  dir.create(raster_tmp)
+  rasterOptions(tmpdir=raster_tmp)
   
   # aquire mask
   mask <- brick(paste0('/nfs/datadrivendroughteffect-data/Data/Masks/final_masks/',
@@ -41,16 +46,19 @@ matrix_prep <- function(dname, dfile, res, crop) {
   avg <- calc(msk, fun=mean, na.rm=T)
   writeRaster(avg, paste0(outtmp, '_', crop, '_', 'squared', '_', lname, '.grd'),
               format='raster')
-
+  
   msk <- year * msk
   avg <- calc(msk, fun=mean, na.rm=T)
   writeRaster(avg, paste0(outtmp, '_', crop, '_', 'cubed', '_', lname, '.grd'),
               format='raster')
+  
+  # cleanup raster tmps
+  unlink(raster_tmp, recursive=TRUE)
 }
 
 # # local test
 # result <- do.call(parallel::mcMap, c(matrix_prep,
-#                                      slurm_pars[1:2, , drop=FALSE],
+#                                      slurm_pars[3:4, , drop=FALSE],
 #                                      mc.cores=2))
 
 # apply matrix_prep over slurm_pars in parallel
@@ -77,14 +85,14 @@ matrix_stack <- function(crop, transform) {
   # get indices for .grd files ordered by year
   idx <- order(as.integer(ylist), na.last=TRUE)
   idx <- idx[1:sum(!is.na(ylist))]
-
+  
   d <- stack(dlist[idx])
   names(d) <- ylist[idx]
   writeRaster(d, paste0(outfn, '_', crop, transform, '.grd'),
               format='raster')
-  unlink(dlist)
+  file.remove(dlist)
   
-  if (length(dir(outtmp)) == 0) unlink(outtmp)
+  if (length(dir(outtmp)) == 0) file.remove(outtmp)
 }
 
 # # serial test
