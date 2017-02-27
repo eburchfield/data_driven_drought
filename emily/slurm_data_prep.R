@@ -10,10 +10,10 @@ outtmp <- '/nfs/scratch/ddde/'
 dir.create(outtmp, showWarnings=FALSE)
 
 # UPDATE FOR EACH DATASET
-res <- "365"                # "weekly"
+res <- '365'                # "weekly", "365"
 dname <- 'PRISM'            # "NARR", "NLDAS", 
-outfn <- '/nfs/datadrivendroughteffect-data/Data/Masked_data/TMP_PRISM_annual_ppt'
-dlist <- Sys.glob(paste0('/nfs/datadrivendroughteffect-data/Data/PRISM/PRISM_daily_ppt', '_', '*', '.nc'))
+outfn <- '/nfs/datadrivendroughteffect-data/Data/Masked_data/PRISM_annual_Ztavg'
+dlist <- Sys.glob(paste0('/nfs/datadrivendroughteffect-data/Data/PRISM/PRISM_Z_tavg', '_', '*', '.nc'))
 
 slurm_pars <- expand.grid(dname=dname, dfile=dlist,
                           res=res, crop=crops, stringsAsFactors=FALSE)
@@ -77,14 +77,13 @@ slurm_pars <- expand.grid(crop=crops,
 matrix_stack <- function(crop, transform) {
   
   # list grd and gri files for crop and transform
-  dlist <- Sys.glob(paste0(outtmp, '_', crop, transform, '*'))
+  dlist <- Sys.glob(paste0(outtmp, '_', crop, transform, '_[0-9]*.grd'))
   
   # recover years from .grd files only
   ylist <- str_extract(dlist, '[0-9]+(?=\\.grd)')
   
   # get indices for .grd files ordered by year
-  idx <- order(as.integer(ylist), na.last=TRUE)
-  idx <- idx[1:sum(!is.na(ylist))]
+  idx <- order(as.integer(ylist))
   
   d <- stack(dlist[idx])
   names(d) <- ylist[idx]
