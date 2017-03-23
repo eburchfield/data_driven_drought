@@ -3,7 +3,6 @@ library(raster)
 library(rslurm)
 library(stringr)
 library(ncdf4)
-library(rslurm)
 
 crops <- c("ag", "eco", "maize", "wheat", "soy")
 outtmp <- '/nfs/scratch/ddde/'
@@ -27,9 +26,10 @@ matrix_prep <- function(dname, dfile, res, crop) {
   # aquire mask
   mask <- brick(paste0('/nfs/datadrivendroughteffect-data/Data/Masks/final_masks/',
                        dname, '_', res, '_', crop, '_frac.nc'))
-  
+
   # aquire annual brick
   year <- brick(dfile)
+  mask <- setExtent(mask, extent(year))  #?????
   
   # extract name of future layer
   lname <- str_extract(dfile, '[0-9]+(?=\\.nc)')
@@ -57,8 +57,8 @@ matrix_prep <- function(dname, dfile, res, crop) {
 }
 
 # # local test
-# result <- do.call(parallel::mcMap, c(matrix_prep,
-#                                      slurm_pars[3:4, , drop=FALSE],
+#result <- do.call(parallel::mcMap, c(matrix_prep,
+#                                      slurm_pars[13:14, , drop=FALSE],
 #                                      mc.cores=2))
 
 # apply matrix_prep over slurm_pars in parallel
@@ -78,7 +78,7 @@ matrix_stack <- function(crop, transform) {
   
   # list grd and gri files for crop and transform
   dlist <- Sys.glob(paste0(outtmp, '_', crop, transform, '_[0-9]*.grd'))
-  
+ 
   # recover years from .grd files only
   ylist <- str_extract(dlist, '[0-9]+(?=\\.grd)')
   
@@ -98,7 +98,7 @@ matrix_stack <- function(crop, transform) {
 # matrix_stack(crops[[1]], '')
 
 # apply matrix_stack over slurm_pars in parallel
-slr_opt <- list(partition='sesync',
+slr_opt <- list(partition='sesynctest',
                 dependency=paste0('afterany:', sjob_prep$jobid))
 sjob_stack <- slurm_apply(matrix_stack, slurm_pars,
                           jobname='ddde_stack', nodes=3, cpus_per_node=5,

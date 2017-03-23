@@ -5,19 +5,19 @@ library(raster)
 library(rslurm)
 library(reshape2)
 
-#IAN:  sjob1 runs fine.  construct_panel works fine.  
-#It's only when I run sjob2 as a dependency on sjob1 that things fall apart.
+# Zprecip, Ztavg, Zdeficit, tmean, ppt, deficit
+# ag zeros
+# tmean
+# OK: Zdeficit, Ztavg, ppt, Zprecip, deficit
+
 
 setwd("/nfs/scratch/ddde")
 
 # input masked data file list
-data_list <- Sys.glob(paste('/nfs/datadrivendroughteffect-data/Data/Masked_data/','*', '.grd', sep=''))
+data_list <- Sys.glob(paste('/nfs/datadrivendroughteffect-data/Data/Masked_data/PRISM_annual_Ztavg','*', '.grd', sep=''))
 crop_list <- rep(rep(c("ag", "eco", "maize", "soy", "wheat"), each=3), 6)
 shp_data <- shapefile('/nfs/datadrivendroughteffect-data/Data/County_shp/cty_ndvi_proj.shp')
 dir <- '/nfs/datadrivendroughteffect-data/Data/Extracted_panels/'
-
-data_list <- data_list[31:32] #REMOVE
-crop_list <- crop_list[31:32] #REMOVE
 
 # extract function
 extract_data <- function(i) {
@@ -89,14 +89,16 @@ for (n in 1:length(data_list)) {
   sjob1 <- slurm_apply(extract_data, data.frame(i = seq_along(shp_data)),
                        nodes = 10, cpus_per_node = 8,
                        add_objects = c("rast", "shp_data"), 
-                       slurm_options = list(partition = "sesync")) 
+                       slurm_options = list(partition = "sesync", time='0-6:0:0')) 
+
   sopts <- list(
     partition = "sesyncshared",
     dependency = paste0("afterany:", sjob1$jobid))
 
-  sjob2 <- slurm_call(construct_panel, list(sjob=sjob1), 
-                      add_objects = c('shp_data', 'crop', 'fn'),  
-                      slurm_options = sopts)
+  construct_panel(sjob1)
+  #sjob2 <- slurm_call(construct_panel, list(sjob=sjob1), 
+   #                   add_objects = c('shp_data', 'crop', 'fn'),  
+    #                  slurm_options = sopts)
   
 }
 
