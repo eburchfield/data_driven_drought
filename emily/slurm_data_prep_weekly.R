@@ -11,7 +11,7 @@ dir.create(outtmp, showWarnings=FALSE)
 # UPDATE FOR EACH DATASET
 res <- '365'                # "weekly", "365", 
 dname <- 'NLDAS'            # "NARR", "NLDAS", "PRISM"
-outfn <- '/nfs/datadrivendroughteffect-data/Data/Masked_data/NLDAS_annual_sm'
+outfn <- '/nfs/datadrivendroughteffect-data/Data/Masked_weekly_data/NLDAS_annual_sm'
 dlist <- Sys.glob(paste0('/nfs/datadrivendroughteffect-data/Data/soil_moisture/annual_soil_moisture_bricks/','*','.nc'))
 #Sys.glob(paste0('/nfs/datadrivendroughteffect-data/Data/PRISM/PRISM_Z_tavg', '_', '*', '.nc'))
 weeks <- seq(1, 365, by=7)
@@ -87,28 +87,43 @@ slurm_pars <- expand.grid(crop=crops,
 # function to combine annual tmp files into raster stacks for all years by crop and by polynomial transform
 matrix_stack <- function(crop, transform) {
   
-  crop <- "maize"
-  transform <- "_cubed"
-  
-  
   # list grd and gri files for crop and transform
   dlist <- Sys.glob(paste0(outtmp, '_', crop, transform, '_[0-9]', '*.grd'))
- 
-  # recover years from .grd files only
-  ylist <- str_extract(dlist, '[0-9]+(?=\\.grd)')
+  match <- str_match(dlist, '.*_([0-9]+)_w([0-9]+)\\.grd')
   
-  # get indices for .grd files ordered by year
-  idx <- order(as.integer(ylist))
-  
-  d <- stack(dlist[idx])
-  names(d) <- ylist[idx]
-  writeRaster(d, paste0(outfn, '_', crop, transform, '.grd'),
-              format='raster')
-  file.remove(dlist)
-  
-  if (length(dir(outtmp)) == 0) file.remove(outtmp)
-}
+  year <- seq(as.numeric(min(match[,2])), as.numeric(max(match[,2])), by=1)
+  for (i in 1:length(unique(match[,2]))) {
 
+    # select data for each year
+    yr <- year[i]
+    df <- match[match[,2] == yr,]
+    
+    # get indices for .grd files ordered by year
+    idx <- order(as.integer(df[,3]))
+    wlist <- df[,3]
+    
+    d <- stack(dlist[idx])
+    names(d) <- wlist[idx]
+    writeRaster(d, paste0(outfn, '_', crop, transform, '_', yr, '.grd'), overwrite=T,
+                format='raster')
+    #file.remove(dlist)
+    
+    if (length(dir(outtmp)) == 0) file.remove(outtmp)
+  }
+  
+  ylist <- Sys.glob(paste0(outfn, '_', crop, transform,'*.grd')) #sorted
+  ylist2 <- Sys.glob(paste0(outfn, '_', crop, transform,'*.gri'))
+  final <- stack(ylist)
+  names(final) <- match[,2]
+  writeRaster(final, paste0(outfn,'_', crop, transform,'.grd' ), overwrite=T, format='raster')
+
+  for (fn in 1:length(ylist)) {
+    file.remove(ylist[fn])
+    file.remove(ylist2[fn])
+  }
+}
+  
+ 
 # # serial test
 # matrix_stack(crops[[1]], '')
 
@@ -119,6 +134,10 @@ sjob_stack <- slurm_apply(matrix_stack, slurm_pars,
                           jobname='ddde_stack', nodes=3, cpus_per_node=5,
                           add_objects=c('outfn', 'outtmp'),
                           slurm_options=slr_opt)
+
+all_files <- Sys.glob('/nfs/datadrivendroughteffect-data/Data/Masked_weekly_data/*')
+
+# NOT DELETING FILES???????
 
 # will have to manually cleanup the _rslurm* folders
 # cleanup_files(sjob_prep)

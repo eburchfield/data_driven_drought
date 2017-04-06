@@ -5,19 +5,20 @@ library(stringr)
 library(ncdf4)
 
 crops <- c("ag", "eco", "maize", "wheat", "soy")
-outtmp <- '/nfs/scratch/ddde/'
+outtmp <- '/nfs/scratch/'
 dir.create(outtmp, showWarnings=FALSE)
 
 # UPDATE FOR EACH DATASET
-res <- '365'                # "weekly", "365"
-dname <- 'PRISM'            # "NARR", "NLDAS", 
-outfn <- '/nfs/datadrivendroughteffect-data/Data/Masked_data/PRISM_annual_Ztavg'
-dlist <- Sys.glob(paste0('/nfs/datadrivendroughteffect-data/Data/PRISM/PRISM_Z_tavg', '_', '*', '.nc'))
+res <- '365'                # "weekly", "365", '26' for NLDAS, relevant for mask naming convention only
+dname <- 'NLDAS'            # "NARR", "NLDAS", "PRISM"
+outfn <- '/nfs/datadrivendroughteffect-data/Data/Masked_data/NLDAS_annual_Zsm'
+dlist <- Sys.glob(paste0('/nfs/datadrivendroughteffect-data/Data/soil_moisture/NLDAS_VIC0125_Z_soil_moisture/','*','.nc'))
+#Sys.glob(paste0('/nfs/datadrivendroughteffect-data/Data/PRISM/PRISM_Z_tavg', '_', '*', '.nc'))
 
 slurm_pars <- expand.grid(dname=dname, dfile=dlist,
                           res=res, crop=crops, stringsAsFactors=FALSE)
 matrix_prep <- function(dname, dfile, res, crop) {
-  
+
   # set thread-specific, local tmp dir for raster calculations
   raster_tmp <- paste0('/tmp/ddde_raster_', Sys.getpid())
   dir.create(raster_tmp)
@@ -29,7 +30,9 @@ matrix_prep <- function(dname, dfile, res, crop) {
 
   # aquire annual brick
   year <- brick(dfile)
-  mask <- setExtent(mask, extent(year))  #?????
+  ndays <- dim(year)[3]
+  mask <- mask[[1:ndays]]
+  
   
   # extract name of future layer
   lname <- str_extract(dfile, '[0-9]+(?=\\.nc)')

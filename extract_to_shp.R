@@ -11,10 +11,10 @@ library(reshape2)
 # OK: Zdeficit, Ztavg, ppt, Zprecip, deficit
 
 
-setwd("/nfs/scratch/ddde")
+setwd("/nfs/scratch")
 
 # input masked data file list
-data_list <- Sys.glob(paste('/nfs/datadrivendroughteffect-data/Data/Masked_data/PRISM_annual_Ztavg','*', '.grd', sep=''))
+data_list <- Sys.glob(paste('/nfs/datadrivendroughteffect-data/Data/Masked_data/NLDAS_annual_Zsm','*', '.grd', sep=''))
 crop_list <- rep(rep(c("ag", "eco", "maize", "soy", "wheat"), each=3), 6)
 shp_data <- shapefile('/nfs/datadrivendroughteffect-data/Data/County_shp/cty_ndvi_proj.shp')
 dir <- '/nfs/datadrivendroughteffect-data/Data/Extracted_panels/'
